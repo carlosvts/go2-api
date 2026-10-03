@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.robot import ConnectionState
+
 
 class StatusResponse(BaseModel):
     connected: bool = Field(
-        description="Há conexão WebRTC viva e canal de dados validado."
+        description="Há conexão WebRTC viva e canal de dados validado. É o que "
+        "decide se os comandos são aceitos ou levam `503`."
+    )
+    state: ConnectionState = Field(
+        description="Último estado publicado no tópico `connection`."
+    )
+    since: datetime = Field(
+        description="Momento (UTC) da última transição de `state`."
     )
     battery_percent: int | None = Field(
         default=None,

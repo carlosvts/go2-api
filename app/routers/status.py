@@ -28,6 +28,8 @@ async def get_status(
     snapshot = robot.status()
     return StatusResponse(
         connected=snapshot.connected,
+        state=snapshot.state,
+        since=snapshot.since,
         battery_percent=snapshot.battery_percent,
         mode=snapshot.mode,
         sport_state_age_s=snapshot.sport_state_age_s,
