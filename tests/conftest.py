@@ -78,15 +78,37 @@ class FakeDataChannel:
         self.pub_sub = FakePubSub()
 
 
+class FakePeerConnection:
+    """Imita o `on`/`emit` do `RTCPeerConnection` (pyee) sem abrir nada."""
+
+    def __init__(self) -> None:
+        self.connectionState = "connected"
+        self.handlers: dict[str, list[Any]] = {}
+
+    def on(self, event: str, handler: Any) -> None:
+        self.handlers.setdefault(event, []).append(handler)
+
+    def set_state(self, state: str) -> None:
+        """Muda `connectionState` e dispara `connectionstatechange`."""
+        self.connectionState = state
+        for handler in self.handlers.get("connectionstatechange", []):
+            handler()
+
+
 class FakeConnection:
     def __init__(self) -> None:
         self.isConnected = True
         self.datachannel = FakeDataChannel()
+        self.pc = FakePeerConnection()
         self.disconnected = False
+
+    async def connect(self) -> None:
+        pass
 
     async def disconnect(self) -> None:
         self.disconnected = True
         self.isConnected = False
+        self.pc.set_state("closed")
 
 
 @pytest.fixture
@@ -100,6 +122,19 @@ def robot(settings: Settings, fake_conn: FakeConnection) -> RobotConnection:
     conn = RobotConnection(settings)
     conn._conn = fake_conn
     conn._subscribe_state()
+    return conn
+
+
+@pytest.fixture
+async def connected_robot(
+    settings: Settings, fake_conn: FakeConnection, monkeypatch: pytest.MonkeyPatch
+) -> RobotConnection:
+    """`RobotConnection` que passou pelo `connect()` de verdade."""
+    monkeypatch.setattr(
+        "app.robot.UnitreeWebRTCConnection", lambda *args, **kwargs: fake_conn
+    )
+    conn = RobotConnection(settings)
+    await conn.connect()
     return conn
 
 
