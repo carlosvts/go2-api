@@ -23,7 +23,7 @@ import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -129,7 +129,7 @@ class RobotConnection:
         # Começa `disconnected` e só muda por transição real — inclusive
         # quando o `connect()` da subida falha.
         self._state = ConnectionState.disconnected
-        self._state_since = datetime.now(timezone.utc)
+        self._state_since = datetime.now(UTC)
         self._connection_listeners: list[ConnectionListener] = []
 
         # os dicionarios sao exigencia da nova versao gh do legion
@@ -211,7 +211,7 @@ class RobotConnection:
         if state is self._state:
             return
         self._state = state
-        self._state_since = datetime.now(timezone.utc)
+        self._state_since = datetime.now(UTC)
         log.info("Conexão com o Go2: %s (%s).", state.value, reason)
         payload = {"state": state.value, "reason": reason}
         for listener in self._connection_listeners:
