@@ -21,7 +21,10 @@ import json
 import logging
 import random
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 
 from unitree_webrtc_connect import (
@@ -55,11 +58,38 @@ class RobotTimeoutError(RuntimeError):
     """O robô não respondeu dentro de `GO2_REQUEST_TIMEOUT_S`."""
 
 
+class ConnectionState(str, Enum):
+    """Estado da conexão com o robô, como é publicado aos consumidores.
+
+    É informativo: quem decide se um comando sai ou leva `503` continua sendo
+    `RobotConnection.is_connected`.
+    """
+
+    connected = "connected"
+    disconnected = "disconnected"
+    # Reservado para a reconexão automática; nunca é publicado nesta versão.
+    reconnecting = "reconnecting"
+
+
+_PC_STATE_MAP = {
+    "connected": ConnectionState.connected,
+    "disconnected": ConnectionState.disconnected,
+    "failed": ConnectionState.disconnected,
+    "closed": ConnectionState.disconnected,
+}
+"""`RTCPeerConnection.connectionState` → `ConnectionState`. Estados
+transitórios (`new`, `connecting`) não mudam o estado publicado."""
+
+ConnectionListener = Callable[[dict[str, str]], None]
+
+
 @dataclass(frozen=True)
 class RobotStatus:
     """Snapshot lido do cache em memória — não gera tráfego novo com o robô."""
 
     connected: bool
+    state: ConnectionState
+    since: datetime
     battery_percent: int | None
     mode: int | None
     sport_state_age_s: float | None
@@ -96,6 +126,12 @@ class RobotConnection:
         self._conn: UnitreeWebRTCConnection | None = None
         self._move_task: asyncio.Task[None] | None = None
 
+        # Começa `disconnected` e só muda por transição real — inclusive
+        # quando o `connect()` da subida falha.
+        self._state = ConnectionState.disconnected
+        self._state_since = datetime.now(timezone.utc)
+        self._connection_listeners: list[ConnectionListener] = []
+
         # os dicionarios sao exigencia da nova versao gh do legion
         self._sport_state: dict[str, Any] | None = None
         self._sport_state_at: float | None = None
@@ -120,15 +156,21 @@ class RobotConnection:
         await conn.connect()
         self._conn = conn
         self._subscribe_state()
+        # O pyee aceita vários listeners por evento: o da lib, que atualiza
+        # `isConnected`, continua registrado.
+        conn.pc.on("connectionstatechange", self._on_pc_state)
+        self._set_state(ConnectionState.connected, conn.pc.connectionState)
         # Deixando um emoji para visualizar mais rápido no terminal 
         log.info("🐝 Conectado ao Go2 (%s).", settings.connection_method.value)
 
     async def disconnect(self) -> None:
         await self._cancel_move()
         if self._conn is not None:
+            conn = self._conn
             with contextlib.suppress(Exception):
-                await self._conn.disconnect()
+                await conn.disconnect()
             self._conn = None
+            self._set_state(ConnectionState.disconnected, conn.pc.connectionState)
 
     @property
     def is_connected(self) -> bool:
@@ -138,6 +180,45 @@ class RobotConnection:
             and conn.isConnected
             and conn.datachannel.data_channel_opened
         )
+
+    # ─── Estado da conexão ─────────────────────────────────────────────────
+
+    @property
+    def connection_state(self) -> ConnectionState:
+        return self._state
+
+    @property
+    def connection_since(self) -> datetime:
+        """Momento da última transição de estado."""
+        return self._state_since
+
+    def subscribe_connection(self, listener: ConnectionListener) -> None:
+        """Registra quem recebe `{"state", "reason"}` a cada transição."""
+        self._connection_listeners.append(listener)
+
+    def _on_pc_state(self) -> None:
+        # Sem argumentos: o aiortc emite `connectionstatechange` sem payload.
+        conn = self._conn
+        if conn is None:
+            return
+        reason = conn.pc.connectionState
+        state = _PC_STATE_MAP.get(reason)
+        if state is not None:
+            self._set_state(state, reason)
+
+    def _set_state(self, state: ConnectionState, reason: str) -> None:
+        """Publica só quando o estado muda — eventos repetidos são ignorados."""
+        if state is self._state:
+            return
+        self._state = state
+        self._state_since = datetime.now(timezone.utc)
+        log.info("Conexão com o Go2: %s (%s).", state.value, reason)
+        payload = {"state": state.value, "reason": reason}
+        for listener in self._connection_listeners:
+            try:
+                listener(payload)
+            except Exception:
+                log.exception("❌ Falha num listener de estado da conexão.")
 
     # ─── Cache de estado ───────────────────────────────────────────────────
 
@@ -176,6 +257,8 @@ class RobotConnection:
         mode = _first_path(self._sport_state, ("mode",))
         return RobotStatus(
             connected=self.is_connected,
+            state=self._state,
+            since=self._state_since,
             battery_percent=battery if isinstance(battery, int) else None,
             mode=mode if isinstance(mode, int) else None,
             sport_state_age_s=(
