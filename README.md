@@ -37,7 +37,7 @@ A API sobe sem tentar conectar. O `GET /status` responde `200` com `connected: f
 
 | Endpoint | Corpo | O que faz |
 |---|---|---|
-| `GET /status` | — | Conexão, bateria e modo. Sempre `200`; `?raw=true` inclui os payloads crus. |
+| `GET /status` | — | Conexão (`connected`, `state`, `since`), bateria e modo. Sempre `200`; `?raw=true` inclui os payloads crus. |
 | `POST /commands/posture` | `{"cmd": "stand_up"}` | Muda a postura ([lista abaixo](#posturas)). |
 | `POST /commands/gesture` | `{"cmd": "hello"}` | Executa um gesto ([lista abaixo](#gestos)). |
 | `POST /commands/move` | `{"vx", "vy", "vyaw", "duration_s"}` | Move o robô durante `duration_s` e para. |
