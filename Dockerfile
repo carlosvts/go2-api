@@ -3,7 +3,7 @@
 # ─── Estágio 1: builder ───────────────────────────────────────────────────────
 # Tem compilador e headers. Só serve para montar o `.venv`; não vai para a
 # imagem final.
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.15-slim-bookworm AS builder
 
 # Binário do uv em versão fixa, copiado da imagem oficial.
 COPY --from=ghcr.io/astral-sh/uv:0.12.1 /uv /bin/uv
@@ -32,7 +32,7 @@ RUN uv sync --locked --no-dev --no-install-project
 
 
 # ─── Estágio 2: runtime ───────────────────────────────────────────────────────
-FROM python:3.12-slim-bookworm
+FROM python:3.15-slim-bookworm
 
 # Biblioteca do PortAudio (sem os headers): a lib importa `sounddevice` ao ser
 # carregada, e ele falha sem ela — mesmo a API não usando áudio.
