@@ -1,5 +1,8 @@
 # go2-api
 
+> [!WARNING]
+> **Este repositório não é mais mantido.** O projeto foi movido, com todo o histórico, para o monorepo [carlosvts/go2](https://github.com/carlosvts/go2), na pasta [`api/`](https://github.com/carlosvts/go2/tree/main/api). Mudanças, issues e PRs novos vão lá.
+
 API HTTP que mantém e multiplexa a **única conexão WebRTC** com o Unitree Go2 (NEURON/UFLA). O robô só aceita uma conexão por vez, então os outros serviços (voz, chat etc.) mandam comandos por HTTP em vez de conectar direto.
 <img width="1472" height="800" alt="image" src="https://github.com/user-attachments/assets/f698d3db-2de3-4f88-ac25-461d178a3c12" />
 
